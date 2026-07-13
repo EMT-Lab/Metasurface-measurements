@@ -2,10 +2,19 @@ clc
 close all
 clear
 
+n1500 = 'Probe.exe';
 
+cmdStr = sprintf('taskkill /IM %s /F', n1500);
+[status, cmdOutput] = system(cmdStr);
+
+if status == 0
+    fprintf('%s was closed successfully.\n', n1500);
+else
+    fprintf('Failed to close %s. Error: %s\n', n1500, cmdOutput);
+end
 
 %% Configuration & Connection for the VNA
-resourceStr = 'TCPIP0::172.17.229.244::hislip0::INSTR';
+resourceStr = 'TCPIP0::172.17.228.250::hislip0::INSTR';
 
 
 % Create and open a VISA object
@@ -21,7 +30,7 @@ end
 % Connect to the running instance of N1500A Suite
 fprintf('Connecting to N1500A Application COM server...\n');
 try
-    n1500 = actxserver('N1500A.Application');
+    n1500 = tcpclient('localhost', 5025);
     disp('Successfully connected to N1500A Application.');
 catch ME
     error('Could not connect to N1500A. Ensure the N1500A GUI is running. Error: %s', ME.message);
@@ -95,7 +104,7 @@ port = 1;
 port = string(port);
 
 tracePort = 'S' + port + '_' + port;
-traceName = 'CH1_' + tracePort + '_' + string(traceNum); 
+traceName = 'CH1_' + tracePort + '_' + string(port);
 
 
 % Initialize window
@@ -104,7 +113,7 @@ writeline(vna,'DISP:WIND1:STATE ON');
 
 % Initialize reflection coefficient traces
 calcline = append('CALC:PAR:DEF:EXT "', traceName, '", ', tracePort);
-displayLine = append('DISP:WIND1:TRAC', string(reflectionTrace'), ':FEED "', reflectionName, '"');
+displayLine = append('DISP:WIND1:TRAC', string(1), ':FEED "', traceName, '"');
 
 % Display reflection coefficients
 writeline(vna, calcline);
@@ -118,32 +127,31 @@ pause(1)
 
 
 % Save data to .sNp file
-s1p_destination = append('"C:\Users\Administrator\Documents\SCPI_Test_May_21_2026\S11 data', ...
-    string(datetime('now','Format','MM-dd_HH-mm-ss')), '.s1p",');
+s1p_destination = append(['"C:\Users\Administrator\Documents\SCPI_Test_May_21_2026\' ...
+    'S11 data '], string(datetime('now','Format','MM-dd_HH-mm-ss')), '.s1p",');
 
 permittivity_destination = append('"C:\Users\Administrator\Documents\SCPI_Test_May_21_2026\permitivity data', ...
     string(datetime('now','Format','MM-dd_HH-mm-ss')), '.csv",');
 
 % example: MMEM:STOR:DATA:SNP "filename", "1,2,3", "DB", 1.1
-% paramPort = append(' "',join(ports, ","),'",');
-% paramFormat = append(' "DB",');
-% paramTouchstoneVersion = append(' 1.1');
-% 
-% scpiSave = append('MMEM:STOR:DATA:SNP ',s1p_destination, paramPort, paramFormat, paramTouchstoneVersion);
-% writeline(vna, scpiSave);
+paramPort = append(' "',join(port, ","),'",');
+paramFormat = append(' "DB",');
+paramTouchstoneVersion = append(' 1.1');
+
+scpiSave = append('MMEM:STOR:DATA:SNP ',s1p_destination, paramPort, paramFormat, paramTouchstoneVersion);
+writeline(vna, scpiSave);
 
 
 % Trigger Measurement
-n1500.Measure(); 
+
 
 % Save the underlying S11 data
-s1p_command = sprintf('MMEM:STOR:DATA "%s", "S1p"', s1p_destination);
+s1p_command = append('MMEM:STOR:DATA:SNP ', s1p_destination, '"', string(port), '"', ' "DB" 1.1');
 writeline(vna, s1p_command);
-
+writeline(n1500, ':INIT:IMM');
+csv_command = sprintf('MMEM:STOR:DATA "%s", "csv"', permittivity_destination);
+writeline(n1500, csv_command);
 % Save the complex permittivity
-n1500.SaveDataFile(permittivity_destination);
-
-
 
 
 
