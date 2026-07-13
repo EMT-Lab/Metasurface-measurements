@@ -9,12 +9,22 @@ resourceStr = 'TCPIP0::172.17.229.244::hislip0::INSTR';
 
 
 % Create and open a VISA object
+fprintf('Connecting to VNA via VISA...\n');
 try
     vna = visadev(resourceStr);
     disp('Successfully connected to VNA.');
 catch ME
-    disp('Failed to connect. Check your connection and VISA address.');
-    rethrow(ME);
+    error('Failed to connect. Check your connection and VISA address. Error: %s', ME.message);
+end
+
+
+% Connect to the running instance of N1500A Suite
+fprintf('Connecting to N1500A Application COM server...\n');
+try
+    n1500 = actxserver('N1500A.Application');
+    disp('Successfully connected to N1500A Application.');
+catch ME
+    error('Could not connect to N1500A. Ensure the N1500A GUI is running. Error: %s', ME.message);
 end
 
 
@@ -27,17 +37,54 @@ writeline(vna, '*CLS');
 
 
 
-%% Arduino Configuration and connection
-
-% To be written
-
-
-
-
-%% Arduino Moving of the Platform - to be added to for loop with all measurements
-
-% To be written
-
+% %% Arduino Configuration and connection
+% 
+% delete(serialportfind);
+% 
+% serialObj = serialport("COM3", 115200);
+% 
+% configureTerminator(serialObj, "LF");
+% flush(serialObj);
+% 
+% pause(2);
+% 
+% ready = readline(serialObj);
+% disp(ready)
+% 
+% 
+% %% Arduino Moving of the Platform - to be added to for loop with all measurements
+% 
+% stepsPerRev = 2043;
+% module = 1;
+% numTeeth = 15;
+% 
+% distances = [57.0/2,57.0/2-2, 2,2,28.5-4,2,2,28.5-4,2,2,28.5-2+30-2,2.5,28.5,2+5.0/2];
+% positions = cumsum(distances);
+% 
+% function step = DistanceToStep(distance, stepsPerRev, module, numTeeth)
+%     step = -(stepsPerRev * distance)/(pi * module * numTeeth);
+%     step = int32(step);
+% end
+% 
+% steps = DistanceToStep(distances, stepsPerRev, module, numTeeth);
+% totalSteps = DistanceToStep(positions(end), stepsPerRev, module, numTeeth);
+% 
+% %% Loop for phantom movement and data collection
+% for i = 1:length(steps)
+%     %% Sending step and moving motor
+%     writeline(serialObj, string(steps(i)));
+%     receivedString = readline(serialObj);
+%     disp("Received: " + receivedString);
+%     %% Loop for measurements taken
+%     for j = 1:3
+%         fprintf("Scanning\n");
+%         pause(1);
+%     end
+% 
+% end
+% fprintf("DONE\n");
+% 
+% % run this to move back to origin after removing HTP -> writeline(serialObj,'9000')
 
 
 
@@ -71,24 +118,30 @@ pause(1)
 
 
 % Save data to .sNp file
-paramFileName = append('"C:\Users\Administrator\Documents\SCPI_Test_May_21_2026\', ...
-    string(fileName),'_', ...
-    string(datetime('now','Format','MM-dd_HH-mm-ss')), '.s', string(numAntennas), 'p",');
+s1p_destination = append('"C:\Users\Administrator\Documents\SCPI_Test_May_21_2026\S11 data', ...
+    string(datetime('now','Format','MM-dd_HH-mm-ss')), '.s1p",');
 
+permittivity_destination = append('"C:\Users\Administrator\Documents\SCPI_Test_May_21_2026\permitivity data', ...
+    string(datetime('now','Format','MM-dd_HH-mm-ss')), '.csv",');
 
 % example: MMEM:STOR:DATA:SNP "filename", "1,2,3", "DB", 1.1
-paramPort = append(' "',join(ports, ","),'",');
-paramFormat = append(' "DB",');
-paramTouchstoneVersion = append(' 1.1');
-
-scpiSave = append('MMEM:STOR:DATA:SNP ',paramFileName, paramPort, paramFormat, paramTouchstoneVersion);
-writeline(vna, scpiSave);
-
-
+% paramPort = append(' "',join(ports, ","),'",');
+% paramFormat = append(' "DB",');
+% paramTouchstoneVersion = append(' 1.1');
+% 
+% scpiSave = append('MMEM:STOR:DATA:SNP ',s1p_destination, paramPort, paramFormat, paramTouchstoneVersion);
+% writeline(vna, scpiSave);
 
 
+% Trigger Measurement
+n1500.Measure(); 
 
+% Save the underlying S11 data
+s1p_command = sprintf('MMEM:STOR:DATA "%s", "S1p"', s1p_destination);
+writeline(vna, s1p_command);
 
+% Save the complex permittivity
+n1500.SaveDataFile(permittivity_destination);
 
 
 
